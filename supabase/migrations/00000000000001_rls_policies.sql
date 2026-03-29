@@ -1,0 +1,31 @@
+-- ============================================================================
+-- ClinicBoost — Row Level Security (RLS) Policies
+-- ============================================================================
+-- Estas políticas se aplicarán cuando se creen las tablas de negocio.
+-- Plantilla para aplicar a cada tabla con tenant_id.
+--
+-- IMPORTANTE:
+--   - app_user NUNCA puede bypass RLS
+--   - El tenant_id se establece via SET LOCAL app.current_tenant_id
+--   - Solo el usuario de migraciones (superuser) puede modificar esquema
+-- ============================================================================
+
+-- Plantilla de RLS para tablas de negocio:
+--
+-- ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY;
+--
+-- CREATE POLICY tenant_isolation ON {table_name}
+--     USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+--
+-- CREATE POLICY tenant_insert ON {table_name}
+--     FOR INSERT
+--     WITH CHECK (tenant_id = current_setting('app.current_tenant_id')::uuid);
+--
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON {table_name} TO app_user;
+
+-- ─── Ejemplo: aplicar RLS a tenants (lectura propia) ────────────────────────
+-- ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+-- CREATE POLICY tenant_self_access ON tenants
+--     USING (id = current_setting('app.current_tenant_id')::uuid);
+-- GRANT SELECT ON tenants TO app_user;
