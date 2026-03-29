@@ -1,5 +1,5 @@
 services:
-  # ─── PostgreSQL (Supabase-compatible) ─────────────────────────────────────────
+  # ─── PostgreSQL (desarrollo local) ─────────────────────────────────────────
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -17,35 +17,43 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── .NET 10 API ──────────────────────────────────────────────────────────────
+  # ─── .NET API ──────────────────────────────────────────────────────────────
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: src/ClinicBoost.Api/Dockerfile
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
-      DATABASE_URL: "Host=db;Database=clinicboost;Username=postgres;Password=postgres"
-      JWT_SECRET: "dev-secret-key-min-32-chars-long!!"
-      JWT_ISSUER: "https://clinicboost.io"
-      JWT_AUDIENCE: "clinicboost-dashboard"
-      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost"
       ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5000
+      DATABASE_URL: Host=db;Database=clinicboost;Username=postgres;Password=postgres
+      JWT_SECRET: dev-secret-key-min-32-chars-long!!
+      JWT_ISSUER: https://clinicboost.io
+      JWT_AUDIENCE: clinicboost-dashboard
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost
     depends_on:
       db:
         condition: service_healthy
 
-  # ─── React + Vite Frontend ───────────────────────────────────────────────────
+  # ─── React Frontend (dev server) ──────────────────────────────────────────
   web:
     build:
-      context: ./apps/web
+      context: src/ClinicBoost.Web
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:5000
+    depends_on:
+      - api
 
-  # ─── Nginx Reverse Proxy ─────────────────────────────────────────────────────
+  # ─── Nginx Reverse Proxy ──────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:

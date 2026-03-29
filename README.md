@@ -2,88 +2,127 @@
 
 **Revenue Recovery Layer** para clínicas de fisioterapia privadas en España.
 
-> Automatiza llamadas perdidas, huecos de agenda, no-shows y reactivación de pacientes.
+ClinicBoost automatiza la recuperación de ingresos perdidos: llamadas no contestadas, huecos de agenda, no-shows, pacientes inactivos y más. No es un software de gestión clínica — es una capa que se conecta al sistema existente de la clínica.
 
-## Stack
+## Stack Tecnológico
 
 | Capa | Tecnología |
 |------|-----------|
-| Backend | .NET 10 Minimal API — Vertical Slice Architecture |
-| Frontend | React 18 + Vite + TypeScript + Tailwind CSS 4 |
-| Base de datos | PostgreSQL 16 via Supabase |
-| Multi-tenant | `tenant_id` + RLS + EF Core Global Filters |
-| Auth | JWT en cookies httpOnly |
-| Mensajería | Twilio (WhatsApp + Voice) |
-| IA | Claude/OpenAI Function Calling |
+| Backend | .NET 10 Minimal APIs + Vertical Slice Architecture |
+| Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
+| Base de datos | PostgreSQL (Supabase) con Row Level Security |
+| ORM | EF Core 10 con filtros globales multi-tenant |
+| Mensajería | Twilio (WhatsApp Business API + Voice) |
+| Scheduler | Hangfire |
+| IA | OpenAI / Claude con Function Calling |
+| Auth | JWT en cookies httpOnly (nunca localStorage) |
 
-## Estructura del Monorepo
+## Requisitos
 
-```
-clinicboost/
-├── apps/
-│   ├── api/             # .NET 10 Minimal API
-│   │   ├── Domain/      # Entidades + Enums
-│   │   ├── Features/    # Vertical Slices
-│   │   └── Infrastructure/
-│   └── web/             # React + Vite + TypeScript + Tailwind
-├── supabase/
-│   ├── config.toml      # Configuración Supabase CLI
-│   ├── migrations/      # Migraciones SQL + RLS
-│   └── seed/            # Datos de desarrollo
-├── docs/                # Documentación
-├── docker/nginx/        # Configuración Nginx
-├── .github/workflows/   # CI/CD
-└── docker-compose.yml
-```
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) (>= 10.0.201)
+- [Node.js](https://nodejs.org/) (>= 22.x)
+- [Docker](https://www.docker.com/) y Docker Compose
+- PostgreSQL 16+ (o usar Docker Compose)
 
-## Quick Start
+## Inicio Rápido
 
-### Docker Compose (recomendado)
+### 1. Clonar y configurar variables de entorno
 
 ```bash
+git clone https://github.com/632015648a-prog/clinicboost.git
+cd clinicboost
 cp .env.example .env
-docker compose up --build
+# Editar .env con tus valores
 ```
 
-| Servicio | URL |
-|----------|-----|
-| Frontend | http://localhost:5173 |
-| API | http://localhost:5000 |
-| Swagger | http://localhost:5000/swagger |
-| Nginx | http://localhost |
-| PostgreSQL | localhost:5432 |
+### 2. Con Docker Compose (recomendado)
 
-### Desarrollo Local
+```bash
+docker compose up -d
+```
+
+Esto levanta: PostgreSQL, API (.NET), Frontend (React) y Nginx.
+
+- Frontend: http://localhost
+- API: http://localhost:5000
+- Swagger: http://localhost:5000/swagger
+- Health: http://localhost/health
+
+### 3. Sin Docker (desarrollo local)
 
 ```bash
 # Backend
-cd apps/api && dotnet restore && dotnet run
+cd src/ClinicBoost.Api
+dotnet restore
+dotnet run
 
 # Frontend (en otra terminal)
-cd apps/web && npm install && npm run dev
+cd src/ClinicBoost.Web
+npm install
+npm run dev
 ```
+
+- API: http://localhost:5000
+- Frontend: http://localhost:5173
+
+## Estructura del Proyecto
+
+```
+clinicboost/
+├── src/
+│   ├── ClinicBoost.Api/           # Backend .NET 10
+│   │   ├── Domain/
+│   │   │   ├── Entities/          # Entidades del dominio
+│   │   │   └── Enums/             # Enumeraciones
+│   │   ├── Features/              # Vertical Slices (endpoint por feature)
+│   │   │   ├── Appointments/
+│   │   │   ├── Auth/
+│   │   │   ├── Health/
+│   │   │   ├── Tenants/
+│   │   │   └── Webhooks/
+│   │   └── Infrastructure/
+│   │       ├── Middleware/         # TenantMiddleware, TwilioSignatureMiddleware
+│   │       ├── Persistence/       # AppDbContext con filtros globales
+│   │       └── Services/          # Timezone, Idempotency, Messaging
+│   └── ClinicBoost.Web/           # Frontend React + Vite + Tailwind
+├── docker/
+│   └── nginx/                     # Configuración Nginx
+├── docker-compose.yml
+├── .env.example
+├── global.json                    # Pinning de versión .NET
+└── ClinicBoost.sln
+```
+
+## Arquitectura
+
+- **Vertical Slice Architecture**: cada feature es autocontenida (Endpoint + Request + Handler)
+- **Multi-tenant**: todas las tablas de negocio llevan `tenant_id`, EF Core filtra automáticamente
+- **RLS**: PostgreSQL Row Level Security como última línea de defensa
+- **Idempotencia**: tabla `processed_events` para deduplicación de webhooks
+- **Timezone**: siempre UTC en DB, conversión con `TimeZoneInfo` (nunca `AddHours`)
+- **Seguridad**: JWT en cookies httpOnly, firma HMAC-SHA1 en webhooks de Twilio
 
 ## Reglas Arquitectónicas
 
-- **Vertical Slice Architecture** — cada feature autocontenida, sin capas horizontales
-- **Multi-tenant** — todas las tablas llevan `tenant_id`, RLS en PostgreSQL
-- **Sin MediatR** — sin AutoMapper — sin repositorios genéricos
-- **JWT en cookies httpOnly** — NUNCA en localStorage
-- **Timezone** — UTC storage + `TimezoneService` (nunca `AddHours`)
-- **IA propone, backend ejecuta** — la IA nunca confirma citas directamente
-- **Resiliencia** — circuit breaker + retry + timeout en toda integración externa
-- **Idempotencia** — tabla `processed_events` para webhooks
-- **Webhooks** — validación criptográfica (HMAC-SHA1 Twilio)
+- No usar MediatR ni AutoMapper salvo instrucción explícita
+- No guardar tokens en localStorage
+- No permitir bypass de RLS desde el runtime de la app
+- No usar `AddHours` manual para timezones
+- Toda integración externa debe tener timeout, retry y circuit breaker
+- Todo webhook debe ser idempotente y validado criptográficamente
+- La IA nunca confirma citas por sí misma; el backend ejecuta
 
 ## Roadmap
 
 | Bloque | Descripción | Estado |
-|--------|-------------|--------|
-| 0 | Scaffolding + estructura | ✓ |
+|--------|------------|--------|
+| 0 | Scaffolding + entidades + middleware | **Actual** |
 | 1 | Multi-tenant + Auth + RLS | Pendiente |
-| 2 | Twilio + WhatsApp | Pendiente |
-| 3 | iCal + Yield Management | Pendiente |
-| 4 | Flow 01 — Llamadas Perdidas | Pendiente |
-| 5-17 | Flows restantes + Dashboard + Deploy | Pendiente |
+| 2 | Webhooks Twilio (voz + WhatsApp) | Pendiente |
+| 3 | Motor de citas + iCal | Pendiente |
+| 4 | Flow 01 — Llamadas perdidas | Pendiente |
+| 5-17 | Flows adicionales + dashboard + deploy | Pendiente |
 
-Ver [docs/architecture.md](docs/architecture.md) para documentación completa.
+## Licencia
+
+Propietario. Todos los derechos reservados.

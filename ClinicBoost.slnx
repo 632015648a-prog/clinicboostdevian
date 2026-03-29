@@ -1,3 +1,5 @@
 <Solution>
-  <Project Path="apps/api/ClinicBoost.Api.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/ClinicBoost.Api/ClinicBoost.Api.csproj" />
+  </Folder>
 </Solution>
